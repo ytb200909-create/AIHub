@@ -78,7 +78,7 @@ enum AIService {
             messages.append(["role": "system", "content": system])
         }
         for message in history where message.role != .system {
-            messages.append(["role": message.role.rawValue, "content": message.text])
+            messages.append(["role": message.role.rawValue, "content": openAIContent(message)])
         }
 
         request.httpBody = try JSONSerialization.data(
@@ -120,7 +120,7 @@ enum AIService {
 
         var messages: [[String: Any]] = []
         for message in history where message.role != .system {
-            messages.append(["role": message.role.rawValue, "content": message.text])
+            messages.append(["role": message.role.rawValue, "content": anthropicContent(message)])
         }
 
         var body: [String: Any] = [
@@ -171,7 +171,7 @@ enum AIService {
         var contents: [[String: Any]] = []
         for message in history where message.role != .system {
             let role = message.role == .assistant ? "model" : "user"
-            contents.append(["role": role, "parts": [["text": message.text]]])
+            contents.append(["role": role, "parts": geminiParts(message)])
         }
 
         var body: [String: Any] = ["contents": contents]
@@ -194,6 +194,49 @@ enum AIService {
     }
 
     // MARK: - Helpers
+
+    /// Nội dung user message cho OpenAI-compatible API (hỗ trợ ảnh dạng data URL).
+    private static func openAIContent(_ message: ChatMessage) -> Any {
+        if let images = message.images, !images.isEmpty {
+            var content: [[String: Any]] = [["type": "text", "text": message.text]]
+            for image in images {
+                content.append([
+                    "type": "image_url",
+                    "image_url": ["url": "data:\(image.mimeType);base64,\(image.base64)"]
+                ])
+            }
+            return content
+        }
+        return message.text
+    }
+
+    /// Nội dung cho Anthropic API (ảnh dạng base64 source).
+    private static func anthropicContent(_ message: ChatMessage) -> Any {
+        if let images = message.images, !images.isEmpty {
+            var content: [[String: Any]] = [["type": "text", "text": message.text]]
+            for image in images {
+                content.append([
+                    "type": "image",
+                    "source": ["type": "base64", "media_type": image.mimeType, "data": image.base64]
+                ])
+            }
+            return content
+        }
+        return message.text
+    }
+
+    /// Parts cho Gemini API (ảnh dạng inline_data).
+    private static func geminiParts(_ message: ChatMessage) -> [[String: Any]] {
+        var parts: [[String: Any]] = [["text": message.text]]
+        if let images = message.images {
+            for image in images {
+                parts.append([
+                    "inline_data": ["mime_type": image.mimeType, "data": image.base64]
+                ])
+            }
+        }
+        return parts
+    }
 
     private static func baseURL(_ provider: AIProvider) -> String {
         var base = provider.defaultBaseURL

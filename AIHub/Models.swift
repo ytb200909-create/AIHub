@@ -128,10 +128,16 @@ enum MessageRole: String, Codable {
     case assistant
 }
 
+struct ImageAttachment: Codable, Equatable {
+    var base64: String
+    var mimeType: String
+}
+
 struct ChatMessage: Identifiable, Codable, Equatable {
     var id: UUID = UUID()
     var role: MessageRole
     var text: String
+    var images: [ImageAttachment]? = nil
 }
 
 struct Conversation: Identifiable, Codable, Equatable {
