@@ -99,8 +99,8 @@ enum Providers {
             symbol: "desktopcomputer",
             apiStyle: .openai,
             defaultBaseURL: "http://localhost:11434/v1",
-            defaultModel: "llama3.2",
-            commonModels: ["llama3.2", "llama3.1", "qwen2.5", "mistral"],
+            defaultModel: "llama3.1:8b",
+            commonModels: ["llama3.1:8b", "llama3.2", "qwen2.5", "mistral"],
             needsAPIKey: false
         ),
         AIProvider(
