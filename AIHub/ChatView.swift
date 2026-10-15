@@ -11,7 +11,7 @@ struct ChatView: View {
     @State private var input = ""
     @State private var isStreaming = false
     @State private var streamTask: Task<Void, Never>?
-    @State private var showHistory = false
+    @State private var showSidebar = false
     @State private var showSettings = false
 
     // Đính kèm
@@ -21,6 +21,7 @@ struct ChatView: View {
     @State private var pendingFileContent: String?
     @State private var showFileImporter = false
     @State private var showCamera = false
+    @State private var showPhotoPicker = false
     @State private var importError: String?
     @State private var isNearBottom = true
     @State private var showScrollButton = false
@@ -38,22 +39,40 @@ struct ChatView: View {
     }
 
     var body: some View {
-        Group {
-            if let conversation {
-                VStack(spacing: 0) {
-                    messageList(conversation)
-                    inputBar(conversation)
+        ZStack {
+            Group {
+                if let conversation {
+                    if conversation.messages.isEmpty {
+                        // Màn hình chào kiểu ChatGPT: nội dung + ô nhập ở giữa màn hình
+                        VStack(spacing: 0) {
+                            Spacer()
+                            emptyState
+                            Spacer()
+                            inputBar(conversation)
+                            Text("AI Hub có thể mắc lỗi. Hãy kiểm tra các thông tin quan trọng.")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                                .padding(.top, 6)
+                                .padding(.bottom, 4)
+                        }
+                    } else {
+                        VStack(spacing: 0) {
+                            messageList(conversation)
+                            inputBar(conversation)
+                        }
+                    }
+                } else {
+                    ContentUnavailableView("Chưa có chat nào", systemImage: "bubble.left.and.text.bubble.right")
                 }
-            } else {
-                ContentUnavailableView("Chưa có chat nào", systemImage: "bubble.left.and.text.bubble.right")
+            }
+
+            if showSidebar {
+                sidebarOverlay
             }
         }
         .navigationTitle(provider.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarContent }
-        .sheet(isPresented: $showHistory) {
-            ConversationListView()
-        }
         .sheet(isPresented: $showSettings) {
             SettingsView()
         }
@@ -133,9 +152,15 @@ struct ChatView: View {
 
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
+                Button {
+                    showSettings = true
+                } label: {
+                    Label("Cài đặt", systemImage: "gearshape")
+                }
                 ShareLink(item: exportText) {
                     Label("Xuất chat ra văn bản", systemImage: "square.and.arrow.up")
                 }
+                Divider()
                 Button(role: .destructive) {
                     if let conversation {
                         conversations.clearMessages(conversation.id)
@@ -159,14 +184,9 @@ struct ChatView: View {
 
         ToolbarItemGroup(placement: .topBarLeading) {
             Button {
-                showHistory = true
+                withAnimation(.easeOut(duration: 0.22)) { showSidebar = true }
             } label: {
-                Image(systemName: "clock.arrow.circlepath")
-            }
-            Button {
-                showSettings = true
-            } label: {
-                Image(systemName: "gearshape")
+                Image(systemName: "sidebar.left")
             }
         }
     }
@@ -191,15 +211,24 @@ struct ChatView: View {
                     }
 
                     if !isStreaming,
-                       conversation.messages.last?.role == .assistant,
-                       conversation.messages.last?.text.isEmpty == false {
-                        Button {
-                            regenerate(conversation)
-                        } label: {
-                            Label("Tạo lại câu trả lời", systemImage: "arrow.clockwise")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                       let last = conversation.messages.last,
+                       last.role == .assistant,
+                       !last.text.isEmpty {
+                        // Hàng hành động kiểu ChatGPT: copy + tạo lại, đặt dưới câu trả lời
+                        HStack(spacing: 20) {
+                            Button {
+                                UIPasteboard.general.string = last.text
+                            } label: {
+                                Image(systemName: "doc.on.doc")
+                            }
+                            Button {
+                                regenerate(conversation)
+                            } label: {
+                                Image(systemName: "arrow.clockwise")
+                            }
                         }
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                         .buttonStyle(.plain)
                         .padding(.leading, 36)
                     }
@@ -276,7 +305,6 @@ struct ChatView: View {
                     .font(.system(size: 34, weight: .semibold))
                     .foregroundStyle(.white)
             }
-            .padding(.top, 46)
 
             VStack(spacing: 6) {
                 Text("Mình có thể giúp gì cho bạn?")
@@ -313,14 +341,30 @@ struct ChatView: View {
             }
             .padding(.horizontal, 4)
 
-            Spacer(minLength: 0)
-
-            Text("AI Hub — bởi ThanhChech © 2026")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-                .padding(.bottom, 8)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    // MARK: Sidebar (menu kéo ngang kiểu ChatGPT)
+
+    private var sidebarOverlay: some View {
+        ZStack(alignment: .leading) {
+            Color.black.opacity(0.35)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    withAnimation(.easeOut(duration: 0.2)) { showSidebar = false }
+                }
+            SidebarDrawer(
+                onClose: {
+                    withAnimation(.easeOut(duration: 0.2)) { showSidebar = false }
+                },
+                onOpenSettings: {
+                    withAnimation(.easeOut(duration: 0.2)) { showSidebar = false }
+                    showSettings = true
+                }
+            )
+            .transition(.move(edge: .leading))
+        }
     }
 
     /// Chỉ tự cuộn khi người dùng đang ở gần cuối (kiểu ChatGPT), trừ khi ép buộc.
@@ -387,63 +431,75 @@ struct ChatView: View {
                 attachmentStrip
             }
 
-            HStack(spacing: 10) {
-                PhotosPicker(selection: $photoSelection, maxSelectionCount: 4, matching: .images) {
-                    Image(systemName: "photo")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                }
-
-                if isCameraAvailable {
+            HStack(spacing: 8) {
+                // Nút "+" gom tất cả kiểu đính kèm (kiểu ChatGPT)
+                Menu {
                     Button {
-                        showCamera = true
+                        showPhotoPicker = true
                     } label: {
-                        Image(systemName: "camera")
-                            .font(.body)
-                            .foregroundStyle(.secondary)
+                        Label("Thư viện ảnh", systemImage: "photo")
                     }
-                }
-
-                Button {
-                    showFileImporter = true
+                    if isCameraAvailable {
+                        Button {
+                            showCamera = true
+                        } label: {
+                            Label("Chụp ảnh", systemImage: "camera")
+                        }
+                    }
+                    Button {
+                        showFileImporter = true
+                    } label: {
+                        Label("Đính kèm file", systemImage: "paperclip")
+                    }
                 } label: {
-                    Image(systemName: "paperclip")
-                        .font(.body)
+                    Image(systemName: "plus.circle")
+                        .font(.system(size: 22))
                         .foregroundStyle(.secondary)
                 }
 
                 TextField("Hỏi bất cứ điều gì…", text: $input, axis: .vertical)
-                    .lineLimit(1...5)
-                    .padding(.horizontal, 6)
+                    .lineLimit(1...6)
 
                 if isStreaming {
                     Button {
                         stopStreaming()
                     } label: {
-                        Image(systemName: "stop.fill")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 32, height: 32)
-                            .background(Circle().fill(Color.red))
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(Color(uiColor: .systemBackground))
+                            .frame(width: 12, height: 12)
+                            .frame(width: 30, height: 30)
+                            .background(Circle().fill(Color(uiColor: .label)))
                     }
                 } else {
                     Button {
                         send(to: conversation)
                     } label: {
                         Image(systemName: "arrow.up")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 32, height: 32)
-                            .background(Circle().fill(canSend ? Color.accentColor : Color(uiColor: .systemGray4)))
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(canSend ? Color(uiColor: .systemBackground) : Color(uiColor: .systemGray3))
+                            .frame(width: 30, height: 30)
+                            .background(Circle().fill(canSend ? Color(uiColor: .label) : Color(uiColor: .systemGray5)))
                     }
                     .disabled(!canSend)
                 }
             }
-            .padding(.leading, 14)
-            .padding(.trailing, 8)
+            .padding(.leading, 10)
+            .padding(.trailing, 6)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(Color(uiColor: .secondarySystemBackground))
+            )
+            .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(.bar)
         }
+        .background(Color(uiColor: .systemBackground))
+        .photosPicker(
+            isPresented: $showPhotoPicker,
+            selection: $photoSelection,
+            maxSelectionCount: 4,
+            matching: .images
+        )
     }
 
     private var trimmedInput: String {
@@ -938,6 +994,92 @@ struct CodeBlockView: View {
         .padding(10)
         .background(Color(red: 0.11, green: 0.12, blue: 0.15))
         .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+// MARK: - Sidebar drawer (kiểu ChatGPT)
+
+struct SidebarDrawer: View {
+    @EnvironmentObject private var conversations: ConversationStore
+    var onClose: () -> Void
+    var onOpenSettings: () -> Void
+
+    @State private var search = ""
+
+    private var filtered: [Conversation] {
+        let term = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !term.isEmpty else { return conversations.conversations }
+        return conversations.conversations.filter { $0.title.lowercased().contains(term) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button {
+                conversations.newConversation(providerID: conversations.current?.providerID ?? Providers.all[0].id)
+                onClose()
+            } label: {
+                Label("Chat mới", systemImage: "plus.message")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                TextField("Tìm kiếm chat", text: $search)
+                    .font(.subheadline)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(Color(uiColor: .secondarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            List {
+                ForEach(filtered) { conversation in
+                    Button {
+                        conversations.select(conversation.id)
+                        onClose()
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(conversation.title)
+                                .lineLimit(1)
+                                .font(.subheadline)
+                                .foregroundColor(.primary)
+                            Text(Providers.byID(conversation.providerID).name)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .listRowBackground(
+                        conversation.id == conversations.currentID
+                            ? Color(uiColor: .secondarySystemBackground)
+                            : Color.clear
+                    )
+                }
+                .onDelete { conversations.delete(at: $0) }
+            }
+            .listStyle(.plain)
+
+            Divider()
+            Button {
+                onOpenSettings()
+            } label: {
+                Label("Cài đặt", systemImage: "gearshape")
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .padding(.vertical, 8)
+        }
+        .padding(16)
+        .frame(maxHeight: .infinity)
+        .frame(width: min(320, UIScreen.main.bounds.width * 0.82))
+        .background(Color(uiColor: .systemBackground))
     }
 }
 
