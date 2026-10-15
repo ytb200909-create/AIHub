@@ -35,7 +35,13 @@ struct SettingsView: View {
 
                         modelField(provider)
                     } header: {
-                        Label(provider.name, systemImage: provider.symbol)
+                        HStack {
+                            Label(provider.name, systemImage: provider.symbol)
+                            Spacer()
+                            Text(provider.isFreeTier ? "🆓 Miễn phí" : "💰 Trả phí")
+                                .font(.caption)
+                                .foregroundStyle(provider.isFreeTier ? .green : .secondary)
+                        }
                     }
                 }
 

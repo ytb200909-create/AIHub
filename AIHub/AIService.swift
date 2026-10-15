@@ -12,7 +12,17 @@ enum AIServiceError: LocalizedError {
         case .badURL:
             return "Base URL không hợp lệ. Kiểm tra lại trong ⚙️ Cài đặt."
         case .httpError(let code, let message):
-            return "Lỗi HTTP \(code): \(message)"
+            let hint: String
+            switch code {
+            case 401: hint = "API key sai hoặc hết hạn — kiểm tra lại trong ⚙️ Cài đặt."
+            case 402: hint = "Tài khoản chưa có tiền — AI này trả phí, cần nạp tiền hoặc dùng AI miễn phí (Gemini/Groq/OpenRouter)."
+            case 403: hint = "Key bị từ chối quyền truy cập — kiểm tra key còn hoạt động không."
+            case 429: hint = "Vượt giới hạn miễn phí — chờ 1-2 phút rồi gửi lại (không mất gì)."
+            case 404: hint = "Model không tồn tại — vào ⚙️ xóa ô Model hoặc chọn model khác."
+            default: hint = ""
+            }
+            let detail = message.isEmpty ? "" : " Chi tiết: \(message)"
+            return "Lỗi HTTP \(code). \(hint)\(detail)"
         }
     }
 }

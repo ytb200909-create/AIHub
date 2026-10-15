@@ -23,6 +23,7 @@ struct AIProvider: Identifiable, Hashable, Codable {
     let defaultModel: String
     let commonModels: [String]
     let needsAPIKey: Bool
+    var isFreeTier: Bool = true
 }
 
 enum Providers {
@@ -35,7 +36,8 @@ enum Providers {
             defaultBaseURL: "https://api.openai.com/v1",
             defaultModel: "gpt-6.1-sol",
             commonModels: ["gpt-6.1-sol", "gpt-6-luna", "gpt-6-astra", "gpt-5.4-mini"],
-            needsAPIKey: true
+            needsAPIKey: true,
+            isFreeTier: false
         ),
         AIProvider(
             id: "anthropic",
@@ -45,7 +47,8 @@ enum Providers {
             defaultBaseURL: "https://api.anthropic.com",
             defaultModel: "claude-sonnet-5-5",
             commonModels: ["claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-5-5", "claude-fable-5-1"],
-            needsAPIKey: true
+            needsAPIKey: true,
+            isFreeTier: false
         ),
         AIProvider(
             id: "gemini",
@@ -91,7 +94,8 @@ enum Providers {
             defaultBaseURL: "https://api.deepseek.com/v1",
             defaultModel: "deepseek-chat",
             commonModels: ["deepseek-chat", "deepseek-reasoner", "deepseek-v4.1-flash", "deepseek-v4-pro"],
-            needsAPIKey: true
+            needsAPIKey: true,
+            isFreeTier: false
         ),
         AIProvider(
             id: "ollama",
