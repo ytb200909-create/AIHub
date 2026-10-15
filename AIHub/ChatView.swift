@@ -975,8 +975,7 @@ struct MarkdownContentView: View {
         } else if trimmed.hasPrefix("# ") {
             inline(String(raw.dropFirst(2)))?.font(.title2.weight(.bold))
         } else if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") || trimmed.hasPrefix("• ") {
-            inline("•  " + String(raw.dropFirst(2)))
-                ?.frame(maxWidth: .infinity, alignment: .leading)
+            inline("•  " + String(raw.dropFirst(2)))?.frame(maxWidth: .infinity, alignment: .leading)
         } else if trimmed.hasPrefix("> ") {
             inline(String(raw.dropFirst(2)))?
                 .foregroundStyle(.secondary)
