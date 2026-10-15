@@ -122,6 +122,15 @@ struct ChatView: View {
             }
         }
 
+        ToolbarItemGroup(placement: .keyboard) {
+            Spacer()
+            Button {
+                hideKeyboard()
+            } label: {
+                Label("Ẩn bàn phím", systemImage: "keyboard.chevron.compact.down")
+            }
+        }
+
         ToolbarItemGroup(placement: .topBarLeading) {
             Button {
                 showHistory = true
@@ -167,6 +176,10 @@ struct ChatView: View {
                 .padding(.horizontal, 12)
                 .padding(.top, 8)
             }
+            .scrollDismissesKeyboard(.interactively)
+            .simultaneousGesture(TapGesture().onEnded {
+                hideKeyboard()
+            })
             .onChange(of: conversation.messages.last?.text ?? "") { _, _ in
                 scrollToBottom(proxy)
             }
@@ -457,7 +470,7 @@ struct AttachmentThumb: View {
     }
 }
 
-// MARK: - Message bubble
+// MARK: - Message bubble (kiểu ChatGPT)
 
 struct MessageBubble: View {
     let message: ChatMessage
@@ -465,10 +478,33 @@ struct MessageBubble: View {
     private var isUser: Bool { message.role == .user }
 
     var body: some View {
-        HStack(alignment: .bottom) {
-            if isUser { Spacer(minLength: 48) }
-
-            VStack(alignment: isUser ? .trailing : .leading, spacing: 6) {
+        if isUser {
+            HStack(alignment: .bottom) {
+                Spacer(minLength: 48)
+                VStack(alignment: .trailing, spacing: 6) {
+                    if let images = message.images, !images.isEmpty {
+                        HStack(spacing: 6) {
+                            ForEach(images.indices, id: \.self) { index in
+                                AttachmentThumb(base64: images[index].base64)
+                                    .frame(width: 120, height: 120)
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                            }
+                        }
+                    }
+                    if !message.text.isEmpty {
+                        Text(message.text)
+                            .textSelection(.enabled)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 9)
+                            .background(AnyShapeStyle(Color.accentColor.opacity(0.9)))
+                            .foregroundColor(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                    }
+                }
+            }
+        } else {
+            // Trả lời của AI: trải rộng toàn chiều rộng, render markdown đẹp như ChatGPT
+            VStack(alignment: .leading, spacing: 6) {
                 if let images = message.images, !images.isEmpty {
                     HStack(spacing: 6) {
                         ForEach(images.indices, id: \.self) { index in
@@ -479,22 +515,133 @@ struct MessageBubble: View {
                     }
                 }
 
-                if !message.text.isEmpty {
-                    Text(message.text)
-                        .textSelection(.enabled)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 9)
-                        .background(
-                            isUser
-                                ? AnyShapeStyle(Color.accentColor.opacity(0.9))
-                                : AnyShapeStyle(Color(uiColor: .secondarySystemBackground))
-                        )
-                        .foregroundColor(isUser ? .white : .primary)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                if message.text.isEmpty {
+                    Text("…")
+                        .foregroundStyle(.secondary)
+                        .font(.body)
+                } else {
+                    MarkdownContentView(text: message.text)
                 }
             }
-
-            if !isUser { Spacer(minLength: 48) }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+}
+
+// MARK: - Markdown rendering
+
+struct MarkdownSegment: Identifiable {
+    let id: Int
+    let isCode: Bool
+    let content: String
+}
+
+struct MarkdownContentView: View {
+    let text: String
+
+    var body: some View {
+        let segments = Self.splitFences(text)
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(segments) { segment in
+                if segment.isCode {
+                    CodeBlockView(code: segment.content)
+                } else if let rendered = Self.inline(segment.content) {
+                    rendered
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+    }
+
+    private static func inline(_ content: String) -> Text? {
+        guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        guard let attributed = try? AttributedString(markdown: content, options: options) else {
+            return Text(content)
+        }
+        return Text(attributed)
+    }
+
+    static func splitFences(_ text: String) -> [MarkdownSegment] {
+        var segments: [MarkdownSegment] = []
+        var plain = ""
+        var codeLines: [String] = []
+        var inCode = false
+
+        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            let lineText = String(line)
+            if lineText.trimmingCharacters(in: .whitespaces).hasPrefix("```") {
+                if inCode {
+                    segments.append(MarkdownSegment(id: segments.count, isCode: true, content: codeLines.joined(separator: "\n")))
+                    codeLines = []
+                    inCode = false
+                } else {
+                    if !plain.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        segments.append(MarkdownSegment(id: segments.count, isCode: false, content: plain))
+                    }
+                    plain = ""
+                    inCode = true
+                }
+            } else if inCode {
+                codeLines.append(lineText)
+            } else {
+                plain += lineText + "\n"
+            }
+        }
+
+        if inCode, !codeLines.isEmpty {
+            segments.append(MarkdownSegment(id: segments.count, isCode: true, content: codeLines.joined(separator: "\n")))
+        } else if !plain.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            segments.append(MarkdownSegment(id: segments.count, isCode: false, content: plain))
+        }
+        return segments
+    }
+}
+
+// MARK: - Code block
+
+struct CodeBlockView: View {
+    let code: String
+    @State private var copied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("CODE")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.5))
+                Spacer()
+                Button {
+                    UIPasteboard.general.string = code
+                    copied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        copied = false
+                    }
+                } label: {
+                    Label(copied ? "Đã copy" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.8))
+                }
+                .buttonStyle(.plain)
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                Text(code)
+                    .font(.system(size: 13, weight: .regular, design: .monospaced))
+                    .foregroundStyle(.white)
+                    .textSelection(.enabled)
+            }
+        }
+        .padding(10)
+        .background(Color(red: 0.11, green: 0.12, blue: 0.15))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+// MARK: - Keyboard helper
+
+extension View {
+    func hideKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 }
