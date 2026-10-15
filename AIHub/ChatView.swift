@@ -25,6 +25,7 @@ struct ChatView: View {
     @State private var importError: String?
     @State private var isNearBottom = true
     @State private var showScrollButton = false
+    @State private var feedback: String?
 
     private var conversation: Conversation? {
         conversations.current
@@ -214,23 +215,36 @@ struct ChatView: View {
                        let last = conversation.messages.last,
                        last.role == .assistant,
                        !last.text.isEmpty {
-                        // Hàng hành động kiểu ChatGPT: copy + tạo lại, đặt dưới câu trả lời
-                        HStack(spacing: 20) {
+                        // Hàng hành động đúng thứ tự ChatGPT: copy · 👍 · 👎 · tạo lại · chia sẻ
+                        HStack(spacing: 22) {
                             Button {
                                 UIPasteboard.general.string = last.text
                             } label: {
                                 Image(systemName: "doc.on.doc")
                             }
                             Button {
+                                withAnimation(.easeInOut(duration: 0.15)) { feedback = feedback == "up" ? nil : "up" }
+                            } label: {
+                                Image(systemName: feedback == "up" ? "hand.thumbsup.fill" : "hand.thumbsup")
+                            }
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.15)) { feedback = feedback == "down" ? nil : "down" }
+                            } label: {
+                                Image(systemName: feedback == "down" ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                            }
+                            Button {
                                 regenerate(conversation)
                             } label: {
                                 Image(systemName: "arrow.clockwise")
                             }
+                            ShareLink(item: last.text) {
+                                Image(systemName: "square.and.arrow.up")
+                            }
                         }
-                        .font(.footnote)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .buttonStyle(.plain)
-                        .padding(.leading, 36)
+                        .padding(.leading, 2)
                     }
 
                     Color.clear.frame(height: 4).id("bottom-anchor")
@@ -757,9 +771,9 @@ struct MessageBubble: View {
                             .textSelection(.enabled)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 10)
-                            .background(AnyShapeStyle(Color(uiColor: .secondarySystemBackground)))
+                            .background(AnyShapeStyle(ChatGPTStyle.userBubble))
                             .foregroundColor(.primary)
-                            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                     }
                 }
                 .contextMenu {
@@ -778,36 +792,22 @@ struct MessageBubble: View {
                 }
             }
         } else {
-            // Trả lời của AI: avatar tròn + chữ trải rộng toàn chiều rộng (kiểu ChatGPT)
-            HStack(alignment: .top, spacing: 10) {
-                ZStack {
-                    Circle()
-                        .fill(LinearGradient(colors: [Color(red: 0.39, green: 0.24, blue: 0.92), Color(red: 0.16, green: 0.47, blue: 1.0)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                }
-                .frame(width: 26, height: 26)
-                .overlay(
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white)
-                )
-                .padding(.top, 2)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    if let images = message.images, !images.isEmpty {
-                        HStack(spacing: 6) {
-                            ForEach(images.indices, id: \.self) { index in
-                                AttachmentThumb(base64: images[index].base64)
-                                    .frame(width: 120, height: 120)
-                                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                            }
+            // Trả lời của AI: chữ trải rộng, KHÔNG khung, KHÔNG avatar — y hệt ChatGPT
+            VStack(alignment: .leading, spacing: 6) {
+                if let images = message.images, !images.isEmpty {
+                    HStack(spacing: 6) {
+                        ForEach(images.indices, id: \.self) { index in
+                            AttachmentThumb(base64: images[index].base64)
+                                .frame(width: 120, height: 120)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
                     }
+                }
 
-                    if message.text.isEmpty {
-                        TypingIndicator()
-                    } else {
-                        MarkdownContentView(text: message.text)
-                    }
+                if message.text.isEmpty {
+                    BlinkingCursor()
+                } else {
+                    MarkdownContentView(text: message.text)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -815,14 +815,54 @@ struct MessageBubble: View {
                 Button {
                     UIPasteboard.general.string = message.text
                 } label: {
-                    Label("Copy câu trả lời", systemImage: "doc.on.doc")
+                    Label("Copy", systemImage: "doc.on.doc")
+                }
+                ShareLink(item: message.text) {
+                    Label("Chia sẻ", systemImage: "square.and.arrow.up")
                 }
             }
         }
     }
 }
 
-// MARK: - Typing indicator (3 chấm nhấp nháy)
+// MARK: - Màu sắc kiểu ChatGPT
+
+enum ChatGPTStyle {
+    /// Màu bong bóng tin nhắn của người dùng: #EFEFF1 sáng / #2F2F32 tối (như ChatGPT)
+    static var userBubble: Color {
+        Color(UIColor { trait in
+            trait.userInterfaceStyle == .dark
+                ? UIColor(red: 0.184, green: 0.184, blue: 0.196, alpha: 1)
+                : UIColor(red: 0.937, green: 0.937, blue: 0.945, alpha: 1)
+        })
+    }
+
+    /// Nền code block: gần đen như ChatGPT (cả chế độ sáng)
+    static var codeBackground: Color {
+        Color(red: 0.05, green: 0.05, blue: 0.06)
+    }
+}
+
+// MARK: - Con trỏ nhấp nháy kiểu ChatGPT (▍) khi AI đang trả lời
+
+struct BlinkingCursor: View {
+    @State private var visible = true
+
+    var body: some View {
+        Text("▍")
+            .font(.body.weight(.semibold))
+            .foregroundStyle(.primary)
+            .opacity(visible ? 1 : 0)
+            .padding(.vertical, 6)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) {
+                    visible = false
+                }
+            }
+    }
+}
+
+// MARK: - Typing indicator (3 chấm nhấp nháy) — dự phòng
 
 struct TypingIndicator: View {
     @State private var animating = false
@@ -893,6 +933,7 @@ struct MarkdownSegment: Identifiable {
     let id: Int
     let isCode: Bool
     let content: String
+    var language: String = ""
 }
 
 struct MarkdownContentView: View {
@@ -903,13 +944,51 @@ struct MarkdownContentView: View {
         VStack(alignment: .leading, spacing: 10) {
             ForEach(segments) { segment in
                 if segment.isCode {
-                    CodeBlockView(code: segment.content)
-                } else if let rendered = Self.inline(segment.content) {
-                    rendered
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    CodeBlockView(code: segment.content, language: segment.language)
+                } else {
+                    VStack(alignment: .leading, spacing: 5) {
+                        let lines = segment.content
+                            .split(separator: "\n", omittingEmptySubsequences: false)
+                            .map(String.init)
+                        ForEach(lines.indices, id: \.self) { index in
+                            Self.styledLine(lines[index])
+                                .textSelection(.enabled)
+                        }
+                    }
                 }
             }
+        }
+    }
+
+    /// Render từng dòng theo khối kiểu ChatGPT: heading, bullet, quote, đoạn văn
+    @ViewBuilder
+    static func styledLine(_ raw: String) -> some View {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty {
+            Text(" ")
+        } else if trimmed.hasPrefix("#### ") {
+            inline(String(raw.dropFirst(5)))?.font(.subheadline.weight(.semibold))
+        } else if trimmed.hasPrefix("### ") {
+            inline(String(raw.dropFirst(4)))?.font(.headline)
+        } else if trimmed.hasPrefix("## ") {
+            inline(String(raw.dropFirst(3)))?.font(.title3.weight(.bold))
+        } else if trimmed.hasPrefix("# ") {
+            inline(String(raw.dropFirst(2)))?.font(.title2.weight(.bold))
+        } else if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") || trimmed.hasPrefix("• ") {
+            inline("•  " + String(raw.dropFirst(2)))
+                ?.frame(maxWidth: .infinity, alignment: .leading)
+        } else if trimmed.hasPrefix("> ") {
+            inline(String(raw.dropFirst(2)))?
+                .foregroundStyle(.secondary)
+                .padding(.leading, 12)
+                .overlay(alignment: .leading) {
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.4))
+                        .frame(width: 3)
+                }
+        } else {
+            (inline(raw) ?? Text(raw))
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -927,20 +1006,24 @@ struct MarkdownContentView: View {
         var plain = ""
         var codeLines: [String] = []
         var inCode = false
+        var language = ""
 
         for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
             let lineText = String(line)
             if lineText.trimmingCharacters(in: .whitespaces).hasPrefix("```") {
                 if inCode {
-                    segments.append(MarkdownSegment(id: segments.count, isCode: true, content: codeLines.joined(separator: "\n")))
+                    segments.append(MarkdownSegment(id: segments.count, isCode: true, content: codeLines.joined(separator: "\n"), language: language))
                     codeLines = []
                     inCode = false
+                    language = ""
                 } else {
                     if !plain.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         segments.append(MarkdownSegment(id: segments.count, isCode: false, content: plain))
                     }
                     plain = ""
                     inCode = true
+                    let after = lineText.trimmingCharacters(in: .whitespaces).dropFirst(3)
+                    language = after.trimmingCharacters(in: .whitespaces)
                 }
             } else if inCode {
                 codeLines.append(lineText)
@@ -950,7 +1033,7 @@ struct MarkdownContentView: View {
         }
 
         if inCode, !codeLines.isEmpty {
-            segments.append(MarkdownSegment(id: segments.count, isCode: true, content: codeLines.joined(separator: "\n")))
+            segments.append(MarkdownSegment(id: segments.count, isCode: true, content: codeLines.joined(separator: "\n"), language: language))
         } else if !plain.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             segments.append(MarkdownSegment(id: segments.count, isCode: false, content: plain))
         }
@@ -962,14 +1045,16 @@ struct MarkdownContentView: View {
 
 struct CodeBlockView: View {
     let code: String
+    var language: String = ""
     @State private var copied = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("CODE")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.5))
+                Text(language.isEmpty ? "code" : language.lowercased())
+                    .font(.caption.weight(.semibold))
+                    .textCase(.lowercase)
+                    .foregroundStyle(.white.opacity(0.6))
                 Spacer()
                 Button {
                     UIPasteboard.general.string = code
@@ -986,14 +1071,14 @@ struct CodeBlockView: View {
             }
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(code)
-                    .font(.system(size: 13, weight: .regular, design: .monospaced))
-                    .foregroundStyle(.white)
+                    .font(.system(size: 13.5, weight: .regular, design: .monospaced))
+                    .foregroundStyle(Color(red: 0.95, green: 0.95, blue: 0.95))
                     .textSelection(.enabled)
             }
         }
-        .padding(10)
-        .background(Color(red: 0.11, green: 0.12, blue: 0.15))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .padding(12)
+        .background(ChatGPTStyle.codeBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
 
