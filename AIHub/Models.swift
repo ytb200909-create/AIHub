@@ -53,8 +53,8 @@ enum Providers {
             symbol: "wand.and.stars",
             apiStyle: .gemini,
             defaultBaseURL: "https://generativelanguage.googleapis.com",
-            defaultModel: "gemini-2.5-flash",
-            commonModels: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
+            defaultModel: "gemini-flash-latest",
+            commonModels: ["gemini-flash-latest", "gemini-3.8-flash", "gemini-3.5-flash", "gemini-pro-latest", "gemini-flash-lite-latest"],
             needsAPIKey: true
         ),
         AIProvider(
@@ -63,12 +63,12 @@ enum Providers {
             symbol: "globe",
             apiStyle: .openai,
             defaultBaseURL: "https://openrouter.ai/api/v1",
-            defaultModel: "openai/gpt-4o-mini",
+            defaultModel: "google/gemma-4-31b-it:free",
             commonModels: [
+                "google/gemma-4-31b-it:free",
+                "nvidia/nemotron-3.5-super-vl:free",
+                "thinkingmachines/inkling:free",
                 "openai/gpt-4o-mini",
-                "anthropic/claude-3.5-sonnet",
-                "google/gemini-2.0-flash-001",
-                "meta-llama/llama-3.3-70b-instruct",
                 "deepseek/deepseek-chat"
             ],
             needsAPIKey: true
@@ -79,8 +79,8 @@ enum Providers {
             symbol: "bolt.fill",
             apiStyle: .openai,
             defaultBaseURL: "https://api.groq.com/openai/v1",
-            defaultModel: "llama-3.3-70b-versatile",
-            commonModels: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "qwen-2.5-32b"],
+            defaultModel: "openai/gpt-oss-120b",
+            commonModels: ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b", "allam-2-7b"],
             needsAPIKey: true
         ),
         AIProvider(
