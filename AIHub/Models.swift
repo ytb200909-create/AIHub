@@ -33,8 +33,8 @@ enum Providers {
             symbol: "sparkles",
             apiStyle: .openai,
             defaultBaseURL: "https://api.openai.com/v1",
-            defaultModel: "gpt-4o-mini",
-            commonModels: ["gpt-4o-mini", "gpt-4o", "gpt-4.1", "gpt-4.1-mini", "o3-mini"],
+            defaultModel: "gpt-6.1-sol",
+            commonModels: ["gpt-6.1-sol", "gpt-6-luna", "gpt-6-astra", "gpt-5.4-mini"],
             needsAPIKey: true
         ),
         AIProvider(
@@ -43,8 +43,8 @@ enum Providers {
             symbol: "brain.head.profile",
             apiStyle: .anthropic,
             defaultBaseURL: "https://api.anthropic.com",
-            defaultModel: "claude-sonnet-4-0",
-            commonModels: ["claude-sonnet-4-0", "claude-opus-4-0", "claude-3-7-sonnet-latest", "claude-3-5-haiku-latest"],
+            defaultModel: "claude-sonnet-5-5",
+            commonModels: ["claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-5-5", "claude-fable-5-1"],
             needsAPIKey: true
         ),
         AIProvider(
@@ -90,7 +90,7 @@ enum Providers {
             apiStyle: .openai,
             defaultBaseURL: "https://api.deepseek.com/v1",
             defaultModel: "deepseek-chat",
-            commonModels: ["deepseek-chat", "deepseek-reasoner"],
+            commonModels: ["deepseek-chat", "deepseek-reasoner", "deepseek-v4.1-flash", "deepseek-v4-pro"],
             needsAPIKey: true
         ),
         AIProvider(
