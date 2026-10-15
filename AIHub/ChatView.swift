@@ -198,7 +198,7 @@ struct ChatView: View {
         GeometryReader { viewport in
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 16) {
+                LazyVStack(spacing: 18) {
                     if conversation.messages.isEmpty {
                         emptyState
                     }
@@ -257,8 +257,8 @@ struct ChatView: View {
                             }
                         )
                 }
-                .padding(.horizontal, 14)
-                .padding(.top, 10)
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
                 .frame(maxWidth: 760)
                 .frame(maxWidth: .infinity)
             }
@@ -322,7 +322,7 @@ struct ChatView: View {
 
             VStack(spacing: 6) {
                 Text("Mình có thể giúp gì cho bạn?")
-                    .font(.title3.weight(.semibold))
+                    .font(.title2.weight(.semibold))
                 Text("Hỏi bất cứ điều gì, hoặc gửi 📷 ảnh / 📎 file để AI phân tích.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -828,18 +828,23 @@ struct MessageBubble: View {
 // MARK: - Màu sắc kiểu ChatGPT
 
 enum ChatGPTStyle {
-    /// Màu bong bóng tin nhắn của người dùng: #EFEFF1 sáng / #2F2F32 tối (như ChatGPT)
+    /// Màu bong bóng tin nhắn của người dùng: #ECECEC sáng / #323232 tối (đúng ChatGPT)
     static var userBubble: Color {
         Color(UIColor { trait in
             trait.userInterfaceStyle == .dark
-                ? UIColor(red: 0.184, green: 0.184, blue: 0.196, alpha: 1)
-                : UIColor(red: 0.937, green: 0.937, blue: 0.945, alpha: 1)
+                ? UIColor(red: 0.196, green: 0.196, blue: 0.196, alpha: 1)
+                : UIColor(red: 0.925, green: 0.925, blue: 0.925, alpha: 1)
         })
     }
 
-    /// Nền code block: gần đen như ChatGPT (cả chế độ sáng)
+    /// Nền code block: #0D0D0D như ChatGPT (cả chế độ sáng)
     static var codeBackground: Color {
-        Color(red: 0.05, green: 0.05, blue: 0.06)
+        Color(red: 0.051, green: 0.051, blue: 0.055)
+    }
+
+    /// Nền header code block: #2F2F2F như ChatGPT
+    static var codeHeaderBackground: Color {
+        Color(red: 0.184, green: 0.184, blue: 0.184)
     }
 }
 
@@ -985,9 +990,13 @@ struct MarkdownContentView: View {
                         .fill(Color.secondary.opacity(0.4))
                         .frame(width: 3)
                 }
+        } else if trimmed == "---" || trimmed == "***" || trimmed == "___" {
+            Divider()
+                .padding(.vertical, 6)
         } else {
             (inline(raw) ?? Text(raw))
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .lineSpacing(5)
         }
     }
 
@@ -1048,7 +1057,8 @@ struct CodeBlockView: View {
     @State private var copied = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header riêng như ChatGPT: tên ngôn ngữ trái, Copy phải, có đường kẻ dưới
             HStack {
                 Text(language.isEmpty ? "code" : language.lowercased())
                     .font(.caption.weight(.semibold))
@@ -1063,19 +1073,27 @@ struct CodeBlockView: View {
                     }
                 } label: {
                     Label(copied ? "Đã copy" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
-                        .font(.caption2)
+                        .font(.caption)
                         .foregroundStyle(.white.opacity(0.8))
                 }
                 .buttonStyle(.plain)
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(ChatGPTStyle.codeHeaderBackground)
+
+            Rectangle()
+                .fill(.white.opacity(0.08))
+                .frame(height: 0.5)
+
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(code)
                     .font(.system(size: 13.5, weight: .regular, design: .monospaced))
                     .foregroundStyle(Color(red: 0.95, green: 0.95, blue: 0.95))
                     .textSelection(.enabled)
+                    .padding(12)
             }
         }
-        .padding(12)
         .background(ChatGPTStyle.codeBackground)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
