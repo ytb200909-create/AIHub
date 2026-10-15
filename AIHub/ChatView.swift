@@ -632,6 +632,15 @@ struct ChatView: View {
             return
         }
 
+        if hasImages && !selectedProvider.supportsVision {
+            conversations.appendMessage(
+                conversation.id,
+                ChatMessage(role: .assistant, text: "⚠️ \(selectedProvider.name) không hỗ trợ nhận ảnh (model \(settings.model(for: selectedProvider)) chỉ xử lý chữ).\n\n👉 Bấm tên AI ở trên cùng và chuyển sang **OpenAI, Claude hoặc Gemini** rồi gửi lại ảnh nhé.")
+            )
+            pendingImages = []
+            return
+        }
+
         let userMessage = ChatMessage(
             role: .user,
             text: finalText,

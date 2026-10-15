@@ -24,6 +24,8 @@ struct AIProvider: Identifiable, Hashable, Codable {
     let commonModels: [String]
     let needsAPIKey: Bool
     var isFreeTier: Bool = true
+    /// Model của provider có nhận ảnh đầu vào không (vision).
+    var supportsVision: Bool = false
 }
 
 enum Providers {
@@ -37,7 +39,8 @@ enum Providers {
             defaultModel: "gpt-6.1-sol",
             commonModels: ["gpt-6.1-sol", "gpt-6-luna", "gpt-6-astra", "gpt-5.4-mini"],
             needsAPIKey: true,
-            isFreeTier: false
+            isFreeTier: false,
+            supportsVision: true
         ),
         AIProvider(
             id: "anthropic",
@@ -48,7 +51,8 @@ enum Providers {
             defaultModel: "claude-sonnet-5-5",
             commonModels: ["claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-5-5", "claude-fable-5-1"],
             needsAPIKey: true,
-            isFreeTier: false
+            isFreeTier: false,
+            supportsVision: true
         ),
         AIProvider(
             id: "gemini",
@@ -58,7 +62,8 @@ enum Providers {
             defaultBaseURL: "https://generativelanguage.googleapis.com",
             defaultModel: "gemini-flash-latest",
             commonModels: ["gemini-flash-latest", "gemini-3.8-flash", "gemini-3.5-flash", "gemini-pro-latest", "gemini-flash-lite-latest"],
-            needsAPIKey: true
+            needsAPIKey: true,
+            supportsVision: true
         ),
         AIProvider(
             id: "openrouter",

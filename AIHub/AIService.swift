@@ -21,8 +21,13 @@ enum AIServiceError: LocalizedError {
             case 404: hint = "Model không tồn tại — vào ⚙️ xóa ô Model hoặc chọn model khác."
             default: hint = ""
             }
+            var extra = ""
+            let lower = message.lowercased()
+            if lower.contains("image") || lower.contains("vision") || lower.contains("multimodal") || lower.contains("content part") || lower.contains("image_url") {
+                extra = " Model này không nhận được ảnh — bấm tên AI ở trên cùng, đổi sang OpenAI/Claude/Gemini, hoặc gửi lại không kèm ảnh."
+            }
             let detail = message.isEmpty ? "" : " Chi tiết: \(message)"
-            return "Lỗi HTTP \(code). \(hint)\(detail)"
+            return "Lỗi HTTP \(code). \(hint)\(extra)\(detail)"
         }
     }
 }
