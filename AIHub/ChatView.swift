@@ -22,6 +22,8 @@ struct ChatView: View {
     @State private var showFileImporter = false
     @State private var showCamera = false
     @State private var importError: String?
+    @State private var isNearBottom = true
+    @State private var showScrollButton = false
 
     private var conversation: Conversation? {
         conversations.current
@@ -172,6 +174,7 @@ struct ChatView: View {
     // MARK: Message list
 
     private func messageList(_ conversation: Conversation) -> some View {
+        GeometryReader { viewport in
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 16) {
@@ -180,7 +183,10 @@ struct ChatView: View {
                     }
 
                     ForEach(conversation.messages) { message in
-                        MessageBubble(message: message)
+                        MessageBubble(message: message, onEdit: message.role == .user ? {
+                            conversations.truncateAfterMessage(conversation.id, message.id)
+                            input = message.text
+                        } : nil)
                             .id(message.id)
                     }
 
@@ -199,6 +205,14 @@ struct ChatView: View {
                     }
 
                     Color.clear.frame(height: 4).id("bottom-anchor")
+                        .background(
+                            GeometryReader { g in
+                                Color.clear.preference(
+                                    key: ChatBottomGapKey.self,
+                                    value: g.frame(in: .global).maxY - viewport.frame(in: .global).maxY
+                                )
+                            }
+                        )
                 }
                 .padding(.horizontal, 14)
                 .padding(.top, 10)
@@ -209,12 +223,35 @@ struct ChatView: View {
             .simultaneousGesture(TapGesture().onEnded {
                 hideKeyboard()
             })
+            .overlay(alignment: .bottom) {
+                if showScrollButton {
+                    Button {
+                        scrollToBottom(proxy, force: true)
+                    } label: {
+                        Image(systemName: "chevron.down")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .frame(width: 34, height: 34)
+                            .background(Circle().fill(.regularMaterial))
+                            .overlay(Circle().strokeBorder(Color.primary.opacity(0.1)))
+                            .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+                    }
+                    .padding(.bottom, 10)
+                    .transition(.opacity.combined(with: .scale))
+                }
+            }
+            .animation(.easeInOut(duration: 0.15), value: showScrollButton)
+            .onPreferenceChange(ChatBottomGapKey.self) { gap in
+                isNearBottom = gap < 120
+                showScrollButton = gap > 100
+            }
             .onChange(of: conversation.messages.last?.text ?? "") { _, _ in
                 scrollToBottom(proxy)
             }
             .onChange(of: conversation.messages.count) { _, _ in
                 scrollToBottom(proxy)
             }
+        }
         }
     }
 
@@ -286,7 +323,9 @@ struct ChatView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private func scrollToBottom(_ proxy: ScrollViewProxy) {
+    /// Chỉ tự cuộn khi người dùng đang ở gần cuối (kiểu ChatGPT), trừ khi ép buộc.
+    private func scrollToBottom(_ proxy: ScrollViewProxy, force: Bool = false) {
+        guard force || isNearBottom else { return }
         withAnimation(.easeOut(duration: 0.15)) {
             proxy.scrollTo("bottom-anchor", anchor: .bottom)
         }
@@ -601,6 +640,16 @@ struct ChatView: View {
     }
 }
 
+// MARK: - Scroll tracking
+
+/// Khoảng cách từ đáy nội dung chat đến đáy màn hình (dương = đã cuộn lên trên).
+struct ChatBottomGapKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value += nextValue()
+    }
+}
+
 // MARK: - Thumbnails
 
 struct AttachmentThumb: View {
@@ -629,6 +678,7 @@ struct AttachmentThumb: View {
 
 struct MessageBubble: View {
     let message: ChatMessage
+    var onEdit: (() -> Void)? = nil
 
     private var isUser: Bool { message.role == .user }
 
@@ -654,6 +704,20 @@ struct MessageBubble: View {
                             .background(AnyShapeStyle(Color(uiColor: .secondarySystemBackground)))
                             .foregroundColor(.primary)
                             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    }
+                }
+                .contextMenu {
+                    Button {
+                        UIPasteboard.general.string = message.text
+                    } label: {
+                        Label("Copy tin nhắn", systemImage: "doc.on.doc")
+                    }
+                    if let onEdit {
+                        Button {
+                            onEdit()
+                        } label: {
+                            Label("Sửa tin nhắn", systemImage: "pencil")
+                        }
                     }
                 }
             }

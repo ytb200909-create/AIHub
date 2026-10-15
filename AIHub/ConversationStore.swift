@@ -117,6 +117,13 @@ final class ConversationStore: ObservableObject {
         conversations[index].messages.remove(at: lastIndex)
     }
 
+    /// Xóa tin nhắn có id cho trước và mọi tin nhắn sau nó (dùng cho "Sửa tin nhắn").
+    func truncateAfterMessage(_ conversationID: UUID, _ messageID: UUID) {
+        guard let index = indexOf(conversationID),
+              let msgIndex = conversations[index].messages.firstIndex(where: { $0.id == messageID }) else { return }
+        conversations[index].messages.removeSubrange(msgIndex...)
+    }
+
     /// Xóa toàn bộ nội dung của một hội thoại.
     func clearMessages(_ conversationID: UUID) {
         guard let index = indexOf(conversationID) else { return }
