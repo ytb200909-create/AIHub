@@ -632,10 +632,17 @@ struct ChatView: View {
             return
         }
 
-        if hasImages && !selectedProvider.supportsVision {
+        let currentModel = settings.model(for: selectedProvider)
+        if hasImages && !selectedProvider.supportsImages(model: currentModel) {
+            let tip: String
+            if let visionModel = selectedProvider.visionModels.first {
+                tip = "Giữ nguyên AI này, chỉ đổi model sang **\(visionModel)** (bấm tên AI ở trên cùng → ô Model) rồi gửi lại ảnh."
+            } else {
+                tip = "Bấm tên AI ở trên cùng và chuyển sang **OpenAI, Claude hoặc Gemini** rồi gửi lại ảnh nhé."
+            }
             conversations.appendMessage(
                 conversation.id,
-                ChatMessage(role: .assistant, text: "⚠️ \(selectedProvider.name) không hỗ trợ nhận ảnh (model \(settings.model(for: selectedProvider)) chỉ xử lý chữ).\n\n👉 Bấm tên AI ở trên cùng và chuyển sang **OpenAI, Claude hoặc Gemini** rồi gửi lại ảnh nhé.")
+                ChatMessage(role: .assistant, text: "⚠️ Model **\(currentModel)** của \(selectedProvider.name) không đọc được ảnh.\n\n👉 \(tip)")
             )
             pendingImages = []
             return

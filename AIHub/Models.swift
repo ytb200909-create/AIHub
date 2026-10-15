@@ -24,8 +24,17 @@ struct AIProvider: Identifiable, Hashable, Codable {
     let commonModels: [String]
     let needsAPIKey: Bool
     var isFreeTier: Bool = true
-    /// Model của provider có nhận ảnh đầu vào không (vision).
+    /// true nếu MỌI model của provider đều nhận ảnh (OpenAI/Claude/Gemini).
     var supportsVision: Bool = false
+    /// Danh sách model nhận ảnh (khi chỉ một số model hỗ trợ vision).
+    var visionModels: [String] = []
+
+    /// Model này có nhận ảnh không?
+    func supportsImages(model: String) -> Bool {
+        if visionModels.isEmpty { return supportsVision }
+        let name = model.lowercased()
+        return visionModels.contains { name.contains($0.lowercased()) }
+    }
 }
 
 enum Providers {
@@ -79,7 +88,8 @@ enum Providers {
                 "openai/gpt-4o-mini",
                 "deepseek/deepseek-chat"
             ],
-            needsAPIKey: true
+            needsAPIKey: true,
+            visionModels: ["nemotron-3.5-super-vl", "gpt-4o"]
         ),
         AIProvider(
             id: "groq",
@@ -88,8 +98,15 @@ enum Providers {
             apiStyle: .openai,
             defaultBaseURL: "https://api.groq.com/openai/v1",
             defaultModel: "openai/gpt-oss-120b",
-            commonModels: ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b", "allam-2-7b"],
-            needsAPIKey: true
+            commonModels: [
+                "openai/gpt-oss-120b",
+                "meta-llama/llama-4-scout-17b-16e-instruct",
+                "meta-llama/llama-4-maverick-17b-128e-instruct",
+                "qwen/qwen3.8-27b",
+                "allam-2-7b"
+            ],
+            needsAPIKey: true,
+            visionModels: ["llama-4-scout", "llama-4-maverick"]
         ),
         AIProvider(
             id: "deepseek",
@@ -109,8 +126,9 @@ enum Providers {
             apiStyle: .openai,
             defaultBaseURL: "http://localhost:11434/v1",
             defaultModel: "llama3.1:8b",
-            commonModels: ["llama3.1:8b", "llama3.2", "qwen2.5", "mistral"],
-            needsAPIKey: false
+            commonModels: ["llama3.1:8b", "llama3.2", "llama3.2-vision", "qwen2.5", "mistral"],
+            needsAPIKey: false,
+            visionModels: ["llama3.2-vision", "llava", "gemma3", "minicpm-v", "moondream"]
         ),
         AIProvider(
             id: "custom",
@@ -120,7 +138,8 @@ enum Providers {
             defaultBaseURL: "",
             defaultModel: "",
             commonModels: [],
-            needsAPIKey: false
+            needsAPIKey: false,
+            supportsVision: true
         ),
     ]
 
