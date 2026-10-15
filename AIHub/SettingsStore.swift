@@ -46,17 +46,19 @@ final class SettingsStore: ObservableObject {
 
     // MARK: Helpers
 
+    private static let whitespace = CharacterSet.whitespacesAndNewlines
+
     func apiKey(for provider: AIProvider) -> String {
-        apiKeys[provider.id] ?? ""
+        (apiKeys[provider.id] ?? "").trimmingCharacters(in: Self.whitespace)
     }
 
     func baseURL(for provider: AIProvider) -> String {
-        let value = baseURLs[provider.id] ?? ""
+        let value = (baseURLs[provider.id] ?? "").trimmingCharacters(in: Self.whitespace)
         return value.isEmpty ? provider.defaultBaseURL : value
     }
 
     func model(for provider: AIProvider) -> String {
-        let value = models[provider.id] ?? ""
+        let value = (models[provider.id] ?? "").trimmingCharacters(in: Self.whitespace)
         return value.isEmpty ? provider.defaultModel : value
     }
 
