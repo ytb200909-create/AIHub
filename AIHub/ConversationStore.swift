@@ -109,6 +109,21 @@ final class ConversationStore: ObservableObject {
         conversations[index].messages[lastIndex].text += text
     }
 
+    /// Xóa tin nhắn assistant cuối cùng (dùng cho "Tạo lại câu trả lời").
+    func removeLastAssistant(_ conversationID: UUID) {
+        guard let index = indexOf(conversationID),
+              let lastIndex = conversations[index].messages.indices.last,
+              conversations[index].messages[lastIndex].role == .assistant else { return }
+        conversations[index].messages.remove(at: lastIndex)
+    }
+
+    /// Xóa toàn bộ nội dung của một hội thoại.
+    func clearMessages(_ conversationID: UUID) {
+        guard let index = indexOf(conversationID) else { return }
+        conversations[index].messages = []
+        conversations[index].title = "Chat mới"
+    }
+
     /// Ghi lỗi vào tin nhắn assistant cuối cùng.
     func appendError(_ conversationID: UUID, _ message: String) {
         guard let index = indexOf(conversationID) else { return }

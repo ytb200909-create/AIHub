@@ -2,6 +2,7 @@ import SwiftUI
 import PhotosUI
 import PDFKit
 import UniformTypeIdentifiers
+import UIKit
 
 struct ChatView: View {
     @EnvironmentObject private var conversations: ConversationStore
@@ -19,6 +20,7 @@ struct ChatView: View {
     @State private var pendingFileName: String?
     @State private var pendingFileContent: String?
     @State private var showFileImporter = false
+    @State private var showCamera = false
     @State private var importError: String?
 
     private var conversation: Conversation? {
@@ -52,6 +54,11 @@ struct ChatView: View {
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()
+        }
+        .sheet(isPresented: $showCamera) {
+            CameraPicker { image in
+                addImage(from: image)
+            }
         }
         .fileImporter(
             isPresented: $showFileImporter,
@@ -122,6 +129,23 @@ struct ChatView: View {
             }
         }
 
+        ToolbarItem(placement: .topBarTrailing) {
+            Menu {
+                ShareLink(item: exportText) {
+                    Label("Xuất chat ra văn bản", systemImage: "square.and.arrow.up")
+                }
+                Button(role: .destructive) {
+                    if let conversation {
+                        conversations.clearMessages(conversation.id)
+                    }
+                } label: {
+                    Label("Xóa nội dung chat này", systemImage: "trash")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+        }
+
         ToolbarItemGroup(placement: .keyboard) {
             Spacer()
             Button {
@@ -158,6 +182,20 @@ struct ChatView: View {
                     ForEach(conversation.messages) { message in
                         MessageBubble(message: message)
                             .id(message.id)
+                    }
+
+                    if !isStreaming,
+                       conversation.messages.last?.role == .assistant,
+                       conversation.messages.last?.text.isEmpty == false {
+                        Button {
+                            regenerate(conversation)
+                        } label: {
+                            Label("Tạo lại câu trả lời", systemImage: "arrow.clockwise")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.leading, 36)
                     }
 
                     Color.clear.frame(height: 4).id("bottom-anchor")
@@ -317,6 +355,16 @@ struct ChatView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                if isCameraAvailable {
+                    Button {
+                        showCamera = true
+                    } label: {
+                        Image(systemName: "camera")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 Button {
                     showFileImporter = true
                 } label: {
@@ -367,10 +415,19 @@ struct ChatView: View {
         !trimmedInput.isEmpty || hasPendingAttachments
     }
 
+    private var isCameraAvailable: Bool {
+        UIImagePickerController.isSourceTypeAvailable(.camera)
+    }
+
     // MARK: Attachments handling
 
     private func addImage(from data: Data) {
         guard pendingImages.count < 4, let image = UIImage(data: data) else { return }
+        addImage(from: image)
+    }
+
+    private func addImage(from image: UIImage) {
+        guard pendingImages.count < 4 else { return }
         let maxDimension: CGFloat = 1280
         let size = image.size
         let scaleFactor = min(1, maxDimension / max(size.width, size.height))
@@ -473,21 +530,28 @@ struct ChatView: View {
         )
         conversations.appendMessage(conversation.id, userMessage)
         let history = conversations.current?.messages ?? []
-        conversations.appendAssistantPlaceholder(conversation.id)
 
-        let conversationID = conversation.id
-        let model = settings.model(for: selectedProvider)
-        let systemPrompt = settings.systemPrompt
-        isStreaming = true
-
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         pendingImages = []
         pendingFileName = nil
         pendingFileContent = nil
 
+        streamResponse(to: conversation, history: history, provider: selectedProvider, apiKey: apiKey)
+    }
+
+    /// Gửi lịch sử hội thoại đến AI và stream câu trả lời vào placeholder cuối.
+    private func streamResponse(to conversation: Conversation, history: [ChatMessage], provider: AIProvider, apiKey: String) {
+        conversations.appendAssistantPlaceholder(conversation.id)
+
+        let conversationID = conversation.id
+        let model = settings.model(for: provider)
+        let systemPrompt = settings.systemPrompt
+        isStreaming = true
+
         streamTask = Task {
             do {
                 let stream = AIService.stream(
-                    provider: selectedProvider,
+                    provider: provider,
                     model: model,
                     apiKey: apiKey,
                     systemPrompt: systemPrompt,
@@ -503,6 +567,30 @@ struct ChatView: View {
             isStreaming = false
             conversations.saveNow()
         }
+    }
+
+    /// Xóa câu trả lời cuối và gọi lại AI với cùng ngữ cảnh.
+    private func regenerate(_ conversation: Conversation) {
+        guard !isStreaming else { return }
+        let selectedProvider = Providers.byID(conversation.providerID)
+        let apiKey = settings.apiKey(for: selectedProvider)
+        guard !selectedProvider.needsAPIKey || !apiKey.isEmpty else { return }
+
+        conversations.removeLastAssistant(conversation.id)
+        let history = conversations.current?.messages ?? []
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        streamResponse(to: conversation, history: history, provider: selectedProvider, apiKey: apiKey)
+    }
+
+    private var exportText: String {
+        guard let conversation else { return "" }
+        var lines = ["# \(conversation.title) — AI Hub (ThanhChech)", ""]
+        for message in conversation.messages {
+            let who = message.role == .user ? "Bạn" : "AI"
+            lines.append("\(who): \(message.text)")
+            lines.append("")
+        }
+        return lines.joined(separator: "\n")
     }
 
     private func stopStreaming() {
@@ -596,16 +684,85 @@ struct MessageBubble: View {
                     }
 
                     if message.text.isEmpty {
-                        Text("Đang soạn…")
-                            .foregroundStyle(.secondary)
-                            .font(.body)
-                            .italic()
+                        TypingIndicator()
                     } else {
                         MarkdownContentView(text: message.text)
                     }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .contextMenu {
+                Button {
+                    UIPasteboard.general.string = message.text
+                } label: {
+                    Label("Copy câu trả lời", systemImage: "doc.on.doc")
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Typing indicator (3 chấm nhấp nháy)
+
+struct TypingIndicator: View {
+    @State private var animating = false
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<3, id: \.self) { index in
+                Circle()
+                    .fill(Color.secondary)
+                    .frame(width: 7, height: 7)
+                    .scaleEffect(animating ? 1.0 : 0.55)
+                    .opacity(animating ? 1.0 : 0.4)
+                    .animation(
+                        .easeInOut(duration: 0.45)
+                            .repeatForever()
+                            .delay(Double(index) * 0.18),
+                        value: animating
+                    )
+            }
+        }
+        .padding(.vertical, 8)
+        .onAppear { animating = true }
+    }
+}
+
+// MARK: - Camera picker
+
+struct CameraPicker: UIViewControllerRepresentable {
+    var onImage: (UIImage) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let parent: CameraPicker
+
+        init(_ parent: CameraPicker) {
+            self.parent = parent
+        }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            if let image = info[.originalImage] as? UIImage {
+                parent.onImage(image)
+            }
+            parent.dismiss()
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.dismiss()
         }
     }
 }
