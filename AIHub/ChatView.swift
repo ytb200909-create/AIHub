@@ -150,20 +150,9 @@ struct ChatView: View {
     private func messageList(_ conversation: Conversation) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 10) {
+                LazyVStack(spacing: 16) {
                     if conversation.messages.isEmpty {
-                        VStack(spacing: 12) {
-                            Image(systemName: provider.symbol)
-                                .font(.system(size: 44))
-                                .foregroundStyle(Color.accentColor)
-                            Text("Xin chào! Mình là \(provider.name).")
-                                .font(.headline)
-                            Text("Nhập câu hỏi, hoặc gửi 📷 ảnh / 📎 file để AI phân tích.")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                        }
-                        .padding(.top, 80)
+                        emptyState
                     }
 
                     ForEach(conversation.messages) { message in
@@ -173,8 +162,10 @@ struct ChatView: View {
 
                     Color.clear.frame(height: 4).id("bottom-anchor")
                 }
-                .padding(.horizontal, 12)
-                .padding(.top, 8)
+                .padding(.horizontal, 14)
+                .padding(.top, 10)
+                .frame(maxWidth: 760)
+                .frame(maxWidth: .infinity)
             }
             .scrollDismissesKeyboard(.interactively)
             .simultaneousGesture(TapGesture().onEnded {
@@ -187,6 +178,74 @@ struct ChatView: View {
                 scrollToBottom(proxy)
             }
         }
+    }
+
+    // MARK: Empty state (màn hình chat mới, kiểu ChatGPT)
+
+    private var suggestions: [(icon: String, title: String, prompt: String)] {
+        [
+            ("envelope", "Viết email", "Hãy giúp tôi viết một email chuyên nghiệp để…"),
+            ("lightbulb", "Lên ý tưởng", "Cho tôi 5 ý tưởng về…"),
+            ("book", "Giải thích dễ hiểu", "Giải thích cho tôi khái niệm… như giải thích cho trẻ 10 tuổi."),
+            ("globe", "Dịch thuật", "Dịch đoạn văn sau sang tiếng Anh:…")
+        ]
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 22) {
+            ZStack {
+                Circle()
+                    .fill(LinearGradient(colors: [Color(red: 0.39, green: 0.24, blue: 0.92), Color(red: 0.16, green: 0.47, blue: 1.0)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: 76, height: 76)
+                Image(systemName: provider.symbol)
+                    .font(.system(size: 34, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+            .padding(.top, 46)
+
+            VStack(spacing: 6) {
+                Text("Mình có thể giúp gì cho bạn?")
+                    .font(.title3.weight(.semibold))
+                Text("Hỏi bất cứ điều gì, hoặc gửi 📷 ảnh / 📎 file để AI phân tích.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                ForEach(suggestions.indices, id: \.self) { index in
+                    let s = suggestions[index]
+                    Button {
+                        input = s.prompt
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: s.icon)
+                                .font(.subheadline)
+                                .foregroundStyle(Color.accentColor)
+                            Text(s.title)
+                                .font(.subheadline)
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 12)
+                        .background(Color(uiColor: .secondarySystemBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 4)
+
+            Spacer(minLength: 0)
+
+            Text("AI Hub — bởi ThanhChech © 2026")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .padding(.bottom, 8)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
@@ -254,43 +313,47 @@ struct ChatView: View {
             HStack(spacing: 10) {
                 PhotosPicker(selection: $photoSelection, maxSelectionCount: 4, matching: .images) {
                     Image(systemName: "photo")
-                        .font(.title3)
-                        .foregroundStyle(Color.accentColor)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
                 }
 
                 Button {
                     showFileImporter = true
                 } label: {
                     Image(systemName: "paperclip")
-                        .font(.title3)
-                        .foregroundStyle(Color.accentColor)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
                 }
 
-                TextField("Nhập tin nhắn…", text: $input, axis: .vertical)
+                TextField("Hỏi bất cứ điều gì…", text: $input, axis: .vertical)
                     .lineLimit(1...5)
-                    .padding(10)
-                    .background(Color(uiColor: .secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                    .padding(.horizontal, 6)
 
                 if isStreaming {
                     Button {
                         stopStreaming()
                     } label: {
-                        Image(systemName: "stop.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(.red)
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 32, height: 32)
+                            .background(Circle().fill(Color.red))
                     }
                 } else {
                     Button {
                         send(to: conversation)
                     } label: {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.title2)
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 32, height: 32)
+                            .background(Circle().fill(canSend ? Color.accentColor : Color(uiColor: .systemGray4)))
                     }
-                    .disabled(trimmedInput.isEmpty && !hasPendingAttachments)
+                    .disabled(!canSend)
                 }
             }
-            .padding(.horizontal, 10)
+            .padding(.leading, 14)
+            .padding(.trailing, 8)
             .padding(.vertical, 8)
             .background(.bar)
         }
@@ -298,6 +361,10 @@ struct ChatView: View {
 
     private var trimmedInput: String {
         input.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canSend: Bool {
+        !trimmedInput.isEmpty || hasPendingAttachments
     }
 
     // MARK: Attachments handling
@@ -480,7 +547,7 @@ struct MessageBubble: View {
     var body: some View {
         if isUser {
             HStack(alignment: .bottom) {
-                Spacer(minLength: 48)
+                Spacer(minLength: 56)
                 VStack(alignment: .trailing, spacing: 6) {
                     if let images = message.images, !images.isEmpty {
                         HStack(spacing: 6) {
@@ -494,33 +561,48 @@ struct MessageBubble: View {
                     if !message.text.isEmpty {
                         Text(message.text)
                             .textSelection(.enabled)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 9)
-                            .background(AnyShapeStyle(Color.accentColor.opacity(0.9)))
-                            .foregroundColor(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(AnyShapeStyle(Color(uiColor: .secondarySystemBackground)))
+                            .foregroundColor(.primary)
+                            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                     }
                 }
             }
         } else {
-            // Trả lời của AI: trải rộng toàn chiều rộng, render markdown đẹp như ChatGPT
-            VStack(alignment: .leading, spacing: 6) {
-                if let images = message.images, !images.isEmpty {
-                    HStack(spacing: 6) {
-                        ForEach(images.indices, id: \.self) { index in
-                            AttachmentThumb(base64: images[index].base64)
-                                .frame(width: 120, height: 120)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
+            // Trả lời của AI: avatar tròn + chữ trải rộng toàn chiều rộng (kiểu ChatGPT)
+            HStack(alignment: .top, spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(LinearGradient(colors: [Color(red: 0.39, green: 0.24, blue: 0.92), Color(red: 0.16, green: 0.47, blue: 1.0)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                }
+                .frame(width: 26, height: 26)
+                .overlay(
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white)
+                )
+                .padding(.top, 2)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    if let images = message.images, !images.isEmpty {
+                        HStack(spacing: 6) {
+                            ForEach(images.indices, id: \.self) { index in
+                                AttachmentThumb(base64: images[index].base64)
+                                    .frame(width: 120, height: 120)
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                            }
                         }
                     }
-                }
 
-                if message.text.isEmpty {
-                    Text("…")
-                        .foregroundStyle(.secondary)
-                        .font(.body)
-                } else {
-                    MarkdownContentView(text: message.text)
+                    if message.text.isEmpty {
+                        Text("Đang soạn…")
+                            .foregroundStyle(.secondary)
+                            .font(.body)
+                            .italic()
+                    } else {
+                        MarkdownContentView(text: message.text)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

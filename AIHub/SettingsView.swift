@@ -50,6 +50,21 @@ struct SettingsView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
+
+                Section {
+                    VStack(spacing: 4) {
+                        Image(systemName: "sparkles")
+                            .font(.title3)
+                            .foregroundStyle(Color.accentColor)
+                        Text("AI Hub v1.0")
+                            .font(.footnote.weight(.semibold))
+                        Text("Thiết kế & phát triển bởi ThanhChech © 2026")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                }
             }
             .navigationTitle("Cài đặt")
             .toolbar {
