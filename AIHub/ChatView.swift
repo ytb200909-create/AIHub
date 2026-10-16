@@ -537,7 +537,7 @@ struct ChatView: View {
 
     private func addImage(from image: UIImage) {
         guard pendingImages.count < 4 else { return }
-        let maxDimension: CGFloat = 1280
+        let maxDimension: CGFloat = 1024
         let size = image.size
         let scaleFactor = min(1, maxDimension / max(size.width, size.height))
         var resized = image
@@ -548,7 +548,7 @@ struct ChatView: View {
                 image.draw(in: CGRect(origin: .zero, size: newSize))
             }
         }
-        guard let jpeg = resized.jpegData(compressionQuality: 0.6) else { return }
+        guard let jpeg = resized.jpegData(compressionQuality: 0.55) else { return }
         pendingImages.append(
             ImageAttachment(base64: jpeg.base64EncodedString(), mimeType: "image/jpeg")
         )
@@ -688,13 +688,19 @@ struct ChatView: View {
                     systemPrompt: systemPrompt
                 )
             } catch AIServiceError.httpError(let code, let body) where code == 404 || (code == 400 && Self.isModelRelatedError(body)) {
-                // Model không tồn tại (404, hoặc 400 kiểu Gemini) → tự chuyển về model mặc định của AI này
-                let fallback = provider.defaultModel
-                settings.models.removeValue(forKey: provider.id)
-                if !fallback.isEmpty && fallback != model {
+                // Model không tồn tại (404, hoặc 400 kiểu Gemini) → tự chuyển sang model phù hợp
+                let withImages = history.last?.images?.isEmpty == false
+                guard let fallback = pickFallbackModel(provider: provider, currentModel: model, withImages: withImages) else {
+                    reportStreamError(AIServiceError.httpError(code, body), conversationID: conversationID)
+                    isStreaming = false
+                    conversations.saveNow()
+                    return
+                }
+                settings.models[provider.id] = fallback
+                if fallback != model {
                     conversations.appendError(
                         conversationID,
-                        "🔄 Model \"\(model)\" không tồn tại — đã tự chuyển sang model mặc định **\(fallback)**, thử lại…"
+                        "🔄 Model \"\(model)\" không nhận được yêu cầu này — đã tự chuyển sang model **\(fallback)**, thử lại…"
                     )
                     do {
                         try await runStream(
@@ -715,27 +721,37 @@ struct ChatView: View {
                     )
                 }
             } catch AIServiceError.httpError(let code, _) where code == 429 || (500...599).contains(code) {
-                // Server bận / quá tải: nếu chưa có nội dung nào thì chờ 3 giây và thử lại 1 lần
+                // Server bận / quá tải: tự thử lại vài lần nếu chưa có nội dung nào
+                let maxRetries = (history.last?.images?.isEmpty == false) ? 2 : 1
+                var recovered = false
+                var lastError: Error = AIServiceError.httpError(code, "")
                 if lastAssistantStillEmpty {
-                    conversations.appendError(conversationID, "⏳ Server đang bận (lỗi \(code)) — chờ 3 giây và thử lại…")
-                    try? await Task.sleep(nanoseconds: 3_000_000_000)
-                    do {
-                        try await runStream(
-                            conversationID: conversationID,
-                            history: history,
-                            provider: provider,
-                            model: model,
-                            apiKey: apiKey,
-                            systemPrompt: systemPrompt
-                        )
-                    } catch {
-                        reportStreamError(error, conversationID: conversationID)
+                    for attempt in 1...maxRetries {
+                        let wait = attempt * 4
+                        conversations.appendError(conversationID, "⏳ Server đang bận (lỗi \(code)) — chờ \(wait) giây rồi thử lại (\(attempt)/\(maxRetries))…")
+                        try? await Task.sleep(nanoseconds: UInt64(wait) * 1_000_000_000)
+                        do {
+                            try await runStream(
+                                conversationID: conversationID,
+                                history: history,
+                                provider: provider,
+                                model: model,
+                                apiKey: apiKey,
+                                systemPrompt: systemPrompt
+                            )
+                            recovered = true
+                            break
+                        } catch AIServiceError.httpError(let retryCode, _) where retryCode == 429 || (500...599).contains(retryCode) {
+                            lastError = AIServiceError.httpError(retryCode, "")
+                            if !lastAssistantStillEmpty { break }
+                        } catch {
+                            lastError = error
+                            break
+                        }
                     }
-                } else {
-                    reportStreamError(
-                        AIServiceError.httpError(code, ""),
-                        conversationID: conversationID
-                    )
+                }
+                if !recovered {
+                    reportStreamError(lastError, conversationID: conversationID)
                 }
             } catch AIServiceError.server(let msg) {
                 conversations.appendError(conversationID, "⚠️ Lỗi từ server: \(msg)")
@@ -745,6 +761,20 @@ struct ChatView: View {
             isStreaming = false
             conversations.saveNow()
         }
+    }
+
+    /// Chọn model dự phòng: nếu đang gửi ảnh thì ưu tiên model khác cùng AI mà đọc được ảnh.
+    private func pickFallbackModel(provider: AIProvider, currentModel: String, withImages: Bool) -> String? {
+        if withImages {
+            let otherVisionModels = provider.commonModels.filter { $0 != currentModel && provider.supportsImages(model: $0) }
+            if let alternative = otherVisionModels.first { return alternative }
+            if provider.supportsImages(model: provider.defaultModel) && provider.defaultModel != currentModel {
+                return provider.defaultModel
+            }
+            return nil
+        }
+        let fallback = provider.defaultModel
+        return (!fallback.isEmpty && fallback != currentModel) ? fallback : nil
     }
 
     /// Lỗi server có phải do model (tên sai/hết hỗ trợ) không — kể cả khi trả về mã 400?
