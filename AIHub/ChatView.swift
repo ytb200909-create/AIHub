@@ -634,18 +634,21 @@ struct ChatView: View {
 
         let currentModel = settings.model(for: selectedProvider)
         if hasImages && !selectedProvider.supportsImages(model: currentModel) {
-            let tip: String
             if let visionModel = selectedProvider.visionModels.first {
-                tip = "Giữ nguyên AI này, chỉ đổi model sang **\(visionModel)** (bấm tên AI ở trên cùng → ô Model) rồi gửi lại ảnh."
+                // Tự động chuyển sang model đọc ảnh của cùng AI — người dùng không phải tự tìm
+                settings.models[selectedProvider.id] = visionModel
+                conversations.appendMessage(
+                    conversation.id,
+                    ChatMessage(role: .assistant, text: "🔄 Đã tự chuyển model sang **\(visionModel)** để đọc ảnh. Gửi lại ảnh hoặc tiếp tục trò chuyện bình thường nhé.")
+                )
             } else {
-                tip = "Bấm tên AI ở trên cùng và chuyển sang **OpenAI, Claude hoặc Gemini** rồi gửi lại ảnh nhé."
+                conversations.appendMessage(
+                    conversation.id,
+                    ChatMessage(role: .assistant, text: "⚠️ \(selectedProvider.name) không có model nào đọc được ảnh.\n\n👉 Bấm tên AI ở trên cùng và chuyển sang **OpenAI, Claude hoặc Gemini** rồi gửi lại ảnh nhé.")
+                )
+                pendingImages = []
+                return
             }
-            conversations.appendMessage(
-                conversation.id,
-                ChatMessage(role: .assistant, text: "⚠️ Model **\(currentModel)** của \(selectedProvider.name) không đọc được ảnh.\n\n👉 \(tip)")
-            )
-            pendingImages = []
-            return
         }
 
         let userMessage = ChatMessage(
