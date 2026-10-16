@@ -668,6 +668,7 @@ struct ChatView: View {
     }
 
     /// Gửi lịch sử hội thoại đến AI và stream câu trả lời vào placeholder cuối.
+    /// Nếu lỗi 404 (model không tồn tại): tự xóa model tùy chỉnh và thử lại bằng model mặc định.
     private func streamResponse(to conversation: Conversation, history: [ChatMessage], provider: AIProvider, apiKey: String) {
         conversations.appendAssistantPlaceholder(conversation.id)
 
@@ -678,23 +679,72 @@ struct ChatView: View {
 
         streamTask = Task {
             do {
-                let stream = AIService.stream(
+                try await runStream(
+                    conversationID: conversationID,
+                    history: history,
                     provider: provider,
                     model: model,
                     apiKey: apiKey,
-                    systemPrompt: systemPrompt,
-                    history: history
+                    systemPrompt: systemPrompt
                 )
-                for try await chunk in stream {
-                    conversations.appendToLastAssistant(conversationID, text: chunk)
+            } catch AIServiceError.httpError(404, _) {
+                // Model không tồn tại → tự chuyển về model mặc định của AI này
+                let fallback = provider.defaultModel
+                settings.models.removeValue(forKey: provider.id)
+                if !fallback.isEmpty && fallback != model {
+                    conversations.appendError(
+                        conversationID,
+                        "🔄 Model \"\(model)\" không tồn tại — đã tự chuyển sang model mặc định **\(fallback)**, thử lại…"
+                    )
+                    do {
+                        try await runStream(
+                            conversationID: conversationID,
+                            history: history,
+                            provider: provider,
+                            model: fallback,
+                            apiKey: apiKey,
+                            systemPrompt: systemPrompt
+                        )
+                    } catch {
+                        reportStreamError(error, conversationID: conversationID)
+                    }
+                } else {
+                    reportStreamError(
+                        AIServiceError.httpError(404, ""),
+                        conversationID: conversationID
+                    )
                 }
             } catch {
-                let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                conversations.appendError(conversationID, "⚠️ \(message)")
+                reportStreamError(error, conversationID: conversationID)
             }
             isStreaming = false
             conversations.saveNow()
         }
+    }
+
+    private func runStream(
+        conversationID: UUID,
+        history: [ChatMessage],
+        provider: AIProvider,
+        model: String,
+        apiKey: String,
+        systemPrompt: String
+    ) async throws {
+        let stream = AIService.stream(
+            provider: provider,
+            model: model,
+            apiKey: apiKey,
+            systemPrompt: systemPrompt,
+            history: history
+        )
+        for try await chunk in stream {
+            conversations.appendToLastAssistant(conversationID, text: chunk)
+        }
+    }
+
+    private func reportStreamError(_ error: Error, conversationID: UUID) {
+        let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        conversations.appendError(conversationID, "⚠️ \(message)")
     }
 
     /// Xóa câu trả lời cuối và gọi lại AI với cùng ngữ cảnh.

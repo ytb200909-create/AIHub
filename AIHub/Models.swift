@@ -45,8 +45,8 @@ enum Providers {
             symbol: "sparkles",
             apiStyle: .openai,
             defaultBaseURL: "https://api.openai.com/v1",
-            defaultModel: "gpt-6.1-sol",
-            commonModels: ["gpt-6.1-sol", "gpt-6-luna", "gpt-6-astra", "gpt-5.4-mini"],
+            defaultModel: "gpt-4o-mini",
+            commonModels: ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1", "o4-mini"],
             needsAPIKey: true,
             isFreeTier: false,
             supportsVision: true
@@ -57,8 +57,8 @@ enum Providers {
             symbol: "brain.head.profile",
             apiStyle: .anthropic,
             defaultBaseURL: "https://api.anthropic.com",
-            defaultModel: "claude-sonnet-5-5",
-            commonModels: ["claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-5-5", "claude-fable-5-1"],
+            defaultModel: "claude-sonnet-4-5",
+            commonModels: ["claude-sonnet-4-5", "claude-haiku-4-5", "claude-opus-4-1", "claude-3-5-haiku-latest"],
             needsAPIKey: true,
             isFreeTier: false,
             supportsVision: true
@@ -69,8 +69,8 @@ enum Providers {
             symbol: "wand.and.stars",
             apiStyle: .gemini,
             defaultBaseURL: "https://generativelanguage.googleapis.com",
-            defaultModel: "gemini-flash-latest",
-            commonModels: ["gemini-flash-latest", "gemini-3.8-flash", "gemini-3.5-flash", "gemini-pro-latest", "gemini-flash-lite-latest"],
+            defaultModel: "gemini-2.5-flash",
+            commonModels: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-flash-latest", "gemini-flash-lite-latest"],
             needsAPIKey: true,
             supportsVision: true
         ),
@@ -80,16 +80,16 @@ enum Providers {
             symbol: "globe",
             apiStyle: .openai,
             defaultBaseURL: "https://openrouter.ai/api/v1",
-            defaultModel: "google/gemma-4-31b-it:free",
+            defaultModel: "google/gemini-2.0-flash-exp:free",
             commonModels: [
-                "google/gemma-4-31b-it:free",
-                "nvidia/nemotron-3.5-super-vl:free",
-                "thinkingmachines/inkling:free",
-                "openai/gpt-4o-mini",
-                "deepseek/deepseek-chat"
+                "google/gemini-2.0-flash-exp:free",
+                "meta-llama/llama-3.3-70b-instruct:free",
+                "deepseek/deepseek-chat-v3-0324:free",
+                "qwen/qwen3-30b-a3b:free",
+                "openai/gpt-4o-mini"
             ],
             needsAPIKey: true,
-            visionModels: ["nemotron-3.5-super-vl", "gpt-4o"]
+            visionModels: ["gemini-2.0-flash-exp", "gpt-4o"]
         ),
         AIProvider(
             id: "groq",
@@ -97,13 +97,13 @@ enum Providers {
             symbol: "bolt.fill",
             apiStyle: .openai,
             defaultBaseURL: "https://api.groq.com/openai/v1",
-            defaultModel: "openai/gpt-oss-120b",
+            defaultModel: "llama-3.3-70b-versatile",
             commonModels: [
-                "openai/gpt-oss-120b",
+                "llama-3.3-70b-versatile",
                 "meta-llama/llama-4-scout-17b-16e-instruct",
                 "meta-llama/llama-4-maverick-17b-128e-instruct",
-                "qwen/qwen3.8-27b",
-                "allam-2-7b"
+                "openai/gpt-oss-120b",
+                "openai/gpt-oss-20b"
             ],
             needsAPIKey: true,
             visionModels: ["llama-4-scout", "llama-4-maverick"]
