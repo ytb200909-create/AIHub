@@ -80,16 +80,16 @@ enum Providers {
             symbol: "globe",
             apiStyle: .openai,
             defaultBaseURL: "https://openrouter.ai/api/v1",
-            defaultModel: "google/gemini-2.0-flash-exp:free",
+            defaultModel: "google/gemma-3-27b-it:free",
             commonModels: [
-                "google/gemini-2.0-flash-exp:free",
+                "google/gemma-3-27b-it:free",
                 "meta-llama/llama-3.3-70b-instruct:free",
                 "deepseek/deepseek-chat-v3-0324:free",
                 "qwen/qwen3-30b-a3b:free",
                 "openai/gpt-4o-mini"
             ],
             needsAPIKey: true,
-            visionModels: ["gemini-2.0-flash-exp", "gpt-4o"]
+            visionModels: ["gemma-3", "gemini", "gpt-4o"]
         ),
         AIProvider(
             id: "groq",

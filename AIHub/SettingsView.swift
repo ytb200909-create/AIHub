@@ -4,6 +4,9 @@ struct SettingsView: View {
     @EnvironmentObject private var settings: SettingsStore
     @Environment(\.dismiss) private var dismiss
 
+    @State private var checkingProviderID: String?
+    @State private var checkResults: [String: String] = [:]
+
     var body: some View {
         NavigationStack {
             Form {
@@ -34,6 +37,7 @@ struct SettingsView: View {
                         .autocorrectionDisabled()
 
                         modelField(provider)
+                        checkRow(provider)
                     } header: {
                         HStack {
                             Label(provider.name, systemImage: provider.symbol)
@@ -76,6 +80,53 @@ struct SettingsView: View {
     }
 
     // MARK: Components
+
+    /// Nút kiểm tra key + kết nối của một AI.
+    private func checkRow(_ provider: AIProvider) -> some View {
+        HStack(spacing: 8) {
+            Button {
+                checkProvider(provider)
+            } label: {
+                HStack(spacing: 5) {
+                    if checkingProviderID == provider.id {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "checkmark.shield")
+                            .font(.footnote)
+                    }
+                    Text("Kiểm tra")
+                        .font(.footnote)
+                }
+            }
+            .buttonStyle(.borderless)
+            .disabled(checkingProviderID != nil)
+
+            if let result = checkResults[provider.id] {
+                Text(result)
+                    .font(.caption)
+                    .foregroundStyle(result.hasPrefix("✅") ? Color.green : Color.red)
+                    .lineLimit(3)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func checkProvider(_ provider: AIProvider) {
+        checkingProviderID = provider.id
+        checkResults[provider.id] = nil
+        Task {
+            let result = await AIService.verifyKey(
+                provider: provider,
+                baseURL: settings.baseURL(for: provider),
+                apiKey: settings.apiKey(for: provider)
+            )
+            await MainActor.run {
+                checkResults[provider.id] = (result.ok ? "✅ " : "❌ ") + result.message
+                checkingProviderID = nil
+            }
+        }
+    }
 
     private func statusDot(_ provider: AIProvider) -> some View {
         Circle()

@@ -714,12 +714,43 @@ struct ChatView: View {
                         conversationID: conversationID
                     )
                 }
+            } catch AIServiceError.httpError(let code, _) where code == 429 || (500...599).contains(code) {
+                // Server bận / quá tải: nếu chưa có nội dung nào thì chờ 3 giây và thử lại 1 lần
+                if lastAssistantStillEmpty {
+                    conversations.appendError(conversationID, "⏳ Server đang bận (lỗi \(code)) — chờ 3 giây và thử lại…")
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    do {
+                        try await runStream(
+                            conversationID: conversationID,
+                            history: history,
+                            provider: provider,
+                            model: model,
+                            apiKey: apiKey,
+                            systemPrompt: systemPrompt
+                        )
+                    } catch {
+                        reportStreamError(error, conversationID: conversationID)
+                    }
+                } else {
+                    reportStreamError(
+                        AIServiceError.httpError(code, ""),
+                        conversationID: conversationID
+                    )
+                }
+            } catch AIServiceError.server(let msg) {
+                conversations.appendError(conversationID, "⚠️ Lỗi từ server: \(msg)")
             } catch {
                 reportStreamError(error, conversationID: conversationID)
             }
             isStreaming = false
             conversations.saveNow()
         }
+    }
+
+    /// Chưa có nội dung nào được stream ra (tin nhắn assistant cuối vẫn trống)?
+    private var lastAssistantStillEmpty: Bool {
+        conversations.current?.messages.last?.role == .assistant
+            && conversations.current?.messages.last?.text.isEmpty == true
     }
 
     private func runStream(
@@ -732,6 +763,7 @@ struct ChatView: View {
     ) async throws {
         let stream = AIService.stream(
             provider: provider,
+            baseURL: settings.baseURL(for: provider),
             model: model,
             apiKey: apiKey,
             systemPrompt: systemPrompt,

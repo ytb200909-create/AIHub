@@ -4,6 +4,7 @@ enum AIServiceError: LocalizedError {
     case missingAPIKey(String)
     case badURL
     case httpError(Int, String)
+    case server(String)
 
     var errorDescription: String? {
         switch self {
@@ -14,20 +15,22 @@ enum AIServiceError: LocalizedError {
         case .httpError(let code, let message):
             let hint: String
             switch code {
-            case 401: hint = "API key sai hoặc hết hạn — kiểm tra lại trong ⚙️ Cài đặt."
+            case 401: hint = "API key sai hoặc hết hạn — kiểm tra lại trong ⚙️ Cài đặt (bấm 'Kiểm tra' để thử ngay)."
             case 402: hint = "Tài khoản chưa có tiền — AI này trả phí, cần nạp tiền hoặc dùng AI miễn phí (Gemini/Groq/OpenRouter)."
             case 403: hint = "Key bị từ chối quyền truy cập — kiểm tra key còn hoạt động không."
             case 429: hint = "Vượt giới hạn miễn phí — chờ 1-2 phút rồi gửi lại (không mất gì)."
-            case 404: hint = "Model không tồn tại — vào ⚙️ xóa ô Model hoặc chọn model khác."
+            case 404: hint = "Model không tồn tại — app sẽ tự chuyển về model mặc định."
             default: hint = ""
             }
             var extra = ""
             let lower = message.lowercased()
             if lower.contains("image") || lower.contains("vision") || lower.contains("multimodal") || lower.contains("content part") || lower.contains("image_url") {
-                extra = " Model này không nhận được ảnh — bấm tên AI ở trên cùng, đổi sang OpenAI/Claude/Gemini, hoặc gửi lại không kèm ảnh."
+                extra = " Model này không nhận được ảnh — app sẽ tự đổi model đọc ảnh, hoặc gửi lại không kèm ảnh."
             }
             let detail = message.isEmpty ? "" : " Chi tiết: \(message)"
             return "Lỗi HTTP \(code). \(hint)\(extra)\(detail)"
+        case .server(let message):
+            return "Lỗi từ server: \(message)"
         }
     }
 }
@@ -39,21 +42,23 @@ enum AIService {
 
     static func stream(
         provider: AIProvider,
+        baseURL customBaseURL: String,
         model: String,
         apiKey: String,
         systemPrompt: String,
         history: [ChatMessage]
     ) -> AsyncThrowingStream<String, Error> {
+        let base = normalizedBase(customBaseURL, provider)
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
                     switch provider.apiStyle {
                     case .openai:
-                        try await streamOpenAI(provider, model, apiKey, systemPrompt, history, continuation)
+                        try await streamOpenAI(base, provider, model, apiKey, systemPrompt, history, continuation)
                     case .anthropic:
-                        try await streamAnthropic(provider, model, apiKey, systemPrompt, history, continuation)
+                        try await streamAnthropic(base, provider, model, apiKey, systemPrompt, history, continuation)
                     case .gemini:
-                        try await streamGemini(provider, model, apiKey, systemPrompt, history, continuation)
+                        try await streamGemini(base, provider, model, apiKey, systemPrompt, history, continuation)
                     }
                     continuation.finish()
                 } catch {
@@ -66,9 +71,70 @@ enum AIService {
         }
     }
 
+    /// Kiểm tra key + base URL có hoạt động không. Trả về (ok, thông báo).
+    static func verifyKey(
+        provider: AIProvider,
+        baseURL customBaseURL: String,
+        apiKey: String
+    ) async -> (ok: Bool, message: String) {
+        let base = normalizedBase(customBaseURL, provider)
+
+        let urlString: String
+        var request: URLRequest
+        switch provider.apiStyle {
+        case .openai:
+            guard let url = URL(string: base + "/models") else {
+                return (false, "Base URL không hợp lệ: \(base)")
+            }
+            request = URLRequest(url: url)
+            request.timeoutInterval = 30
+            if !apiKey.isEmpty {
+                request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+            }
+            urlString = base + "/models"
+        case .anthropic:
+            guard let url = URL(string: base + "/v1/models") else {
+                return (false, "Base URL không hợp lệ: \(base)")
+            }
+            request = URLRequest(url: url)
+            request.timeoutInterval = 30
+            request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+            request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+            urlString = base + "/v1/models"
+        case .gemini:
+            guard let url = URL(string: base + "/v1beta/models") else {
+                return (false, "Base URL không hợp lệ: \(base)")
+            }
+            request = URLRequest(url: url)
+            request.timeoutInterval = 30
+            request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
+            urlString = base + "/v1beta/models"
+        }
+        _ = urlString
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard (200..<300).contains(status) else {
+                let body = String(data: data.prefix(600), encoding: .utf8) ?? ""
+                let error = AIServiceError.httpError(status, body)
+                return (false, error.errorDescription ?? "Lỗi HTTP \(status)")
+            }
+            var count = 0
+            if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                if let list = object["data"] as? [[String: Any]] { count = list.count }
+                if let list = object["models"] as? [[String: Any]] { count = list.count }
+            }
+            return (true, "Kết nối OK\(count > 0 ? " — \(count) model khả dụng" : "").")
+        } catch {
+            return (false, "Không kết nối được \(base) — kiểm tra mạng hoặc Base URL. (\(error.localizedDescription))")
+        }
+    }
+
     // MARK: - OpenAI-compatible (OpenAI, Groq, DeepSeek, OpenRouter, Ollama, custom)
 
     private static func streamOpenAI(
+        _ base: String,
         _ provider: AIProvider,
         _ model: String,
         _ apiKey: String,
@@ -76,12 +142,13 @@ enum AIService {
         _ history: [ChatMessage],
         _ continuation: AsyncThrowingStream<String, Error>.Continuation
     ) async throws {
-        guard let url = URL(string: baseURL(provider) + "/chat/completions") else {
+        guard let url = URL(string: base + "/chat/completions") else {
             throw AIServiceError.badURL
         }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.timeoutInterval = 180
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if !apiKey.isEmpty {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
@@ -101,8 +168,12 @@ enum AIService {
         )
 
         for try await data in ssePayloads(from: request) {
-            guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let choices = object["choices"] as? [[String: Any]],
+            guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+            if let err = object["error"] as? [String: Any],
+               let msg = (err["message"] as? String) ?? (err["error"] as? String) {
+                throw AIServiceError.server(msg)
+            }
+            guard let choices = object["choices"] as? [[String: Any]],
                   let delta = choices.first?["delta"] as? [String: Any],
                   let text = delta["content"] as? String,
                   !text.isEmpty else { continue }
@@ -113,6 +184,7 @@ enum AIService {
     // MARK: - Anthropic (Claude)
 
     private static func streamAnthropic(
+        _ base: String,
         _ provider: AIProvider,
         _ model: String,
         _ apiKey: String,
@@ -123,12 +195,13 @@ enum AIService {
         if apiKey.isEmpty {
             throw AIServiceError.missingAPIKey(provider.name)
         }
-        guard let url = URL(string: baseURL(provider) + "/v1/messages") else {
+        guard let url = URL(string: base + "/v1/messages") else {
             throw AIServiceError.badURL
         }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.timeoutInterval = 180
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
         request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
@@ -151,8 +224,13 @@ enum AIService {
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         for try await data in ssePayloads(from: request) {
-            guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  object["type"] as? String == "content_block_delta",
+            guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+            if object["type"] as? String == "error" {
+                let err = object["error"] as? [String: Any]
+                let msg = (err?["message"] as? String) ?? "Lỗi không xác định"
+                throw AIServiceError.server(msg)
+            }
+            guard object["type"] as? String == "content_block_delta",
                   let delta = object["delta"] as? [String: Any],
                   let text = delta["text"] as? String,
                   !text.isEmpty else { continue }
@@ -163,6 +241,7 @@ enum AIService {
     // MARK: - Google Gemini
 
     private static func streamGemini(
+        _ base: String,
         _ provider: AIProvider,
         _ model: String,
         _ apiKey: String,
@@ -173,13 +252,14 @@ enum AIService {
         if apiKey.isEmpty {
             throw AIServiceError.missingAPIKey(provider.name)
         }
-        let urlString = baseURL(provider) + "/v1beta/models/\(model):streamGenerateContent?alt=sse"
+        let urlString = base + "/v1beta/models/\(model):streamGenerateContent?alt=sse"
         guard let url = URL(string: urlString) else {
             throw AIServiceError.badURL
         }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.timeoutInterval = 180
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
 
@@ -197,8 +277,12 @@ enum AIService {
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         for try await data in ssePayloads(from: request) {
-            guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let candidates = object["candidates"] as? [[String: Any]],
+            guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+            if let err = object["error"] as? [String: Any],
+               let msg = err["message"] as? String {
+                throw AIServiceError.server(msg)
+            }
+            guard let candidates = object["candidates"] as? [[String: Any]],
                   let content = candidates.first?["content"] as? [String: Any],
                   let parts = content["parts"] as? [[String: Any]] else { continue }
             let text = parts.compactMap { $0["text"] as? String }.joined()
@@ -253,8 +337,12 @@ enum AIService {
         return parts
     }
 
-    private static func baseURL(_ provider: AIProvider) -> String {
-        var base = provider.defaultBaseURL
+    /// Base URL dùng thật: tùy chỉnh từ Cài đặt nếu có, không thì dùng mặc định; bỏ dấu "/" cuối.
+    private static func normalizedBase(_ customBaseURL: String, _ provider: AIProvider) -> String {
+        var base = customBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if base.isEmpty {
+            base = provider.defaultBaseURL
+        }
         while base.hasSuffix("/") {
             base.removeLast()
         }
