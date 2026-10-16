@@ -687,8 +687,8 @@ struct ChatView: View {
                     apiKey: apiKey,
                     systemPrompt: systemPrompt
                 )
-            } catch AIServiceError.httpError(404, _) {
-                // Model không tồn tại → tự chuyển về model mặc định của AI này
+            } catch AIServiceError.httpError(let code, let body) where code == 404 || (code == 400 && Self.isModelRelatedError(body)) {
+                // Model không tồn tại (404, hoặc 400 kiểu Gemini) → tự chuyển về model mặc định của AI này
                 let fallback = provider.defaultModel
                 settings.models.removeValue(forKey: provider.id)
                 if !fallback.isEmpty && fallback != model {
@@ -745,6 +745,20 @@ struct ChatView: View {
             isStreaming = false
             conversations.saveNow()
         }
+    }
+
+    /// Lỗi server có phải do model (tên sai/hết hỗ trợ) không — kể cả khi trả về mã 400?
+    private static func isModelRelatedError(_ body: String) -> Bool {
+        let lower = body.lowercased()
+        let mentionsModel = lower.contains("model")
+        let notAvailable = lower.contains("not found")
+            || lower.contains("does not exist")
+            || lower.contains("is not supported")
+            || lower.contains("not supported")
+            || lower.contains("invalid model")
+            || lower.contains("decommissioned")
+            || lower.contains("is not available")
+        return mentionsModel && notAvailable
     }
 
     /// Chưa có nội dung nào được stream ra (tin nhắn assistant cuối vẫn trống)?

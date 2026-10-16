@@ -38,6 +38,9 @@ struct SettingsView: View {
 
                         modelField(provider)
                         checkRow(provider)
+                        if hasAnyCustomValue(provider) {
+                            resetRow(provider)
+                        }
                     } header: {
                         HStack {
                             Label(provider.name, systemImage: provider.symbol)
@@ -126,6 +129,27 @@ struct SettingsView: View {
                 checkingProviderID = nil
             }
         }
+    }
+
+    /// Có lưu tùy chỉnh nào cho AI này không (key/URL/model cũ còn sót)?
+    private func hasAnyCustomValue(_ provider: AIProvider) -> Bool {
+        settings.apiKeys[provider.id]?.isEmpty == false
+            || settings.baseURLs[provider.id]?.isEmpty == false
+            || settings.models[provider.id]?.isEmpty == false
+    }
+
+    /// Xóa mọi tùy chỉnh của một AI về trạng thái mặc định sạch sẽ.
+    private func resetRow(_ provider: AIProvider) -> some View {
+        Button(role: .destructive) {
+            settings.apiKeys.removeValue(forKey: provider.id)
+            settings.baseURLs.removeValue(forKey: provider.id)
+            settings.models.removeValue(forKey: provider.id)
+            checkResults[provider.id] = nil
+        } label: {
+            Label("Xóa tùy chỉnh của AI này (về mặc định)", systemImage: "arrow.uturn.backward.circle")
+                .font(.footnote)
+        }
+        .buttonStyle(.borderless)
     }
 
     private func statusDot(_ provider: AIProvider) -> some View {
