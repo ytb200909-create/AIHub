@@ -49,7 +49,7 @@ enum AIService {
         history: [ChatMessage]
     ) -> AsyncThrowingStream<String, Error> {
         let base = normalizedBase(customBaseURL, provider)
-        AsyncThrowingStream { continuation in
+        return AsyncThrowingStream { continuation in
             let task = Task {
                 do {
                     switch provider.apiStyle {
